@@ -1,9 +1,16 @@
 package com.jimmy.barrage.util;
 
+import org.apache.log4j.Logger;
+
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 /**
  * Copyright (C), 2018
  *
@@ -17,6 +24,9 @@ public class DouyuProtocolMessage {
     private int[] end;
     private ByteArrayOutputStream byteArrayOutputStream;
     private final static char[] hexArray = "0123456789ABCDEF".toCharArray();
+    private static final String REGEX_CHAT_DANMAKU = "type@=chatmsg/.*rid@=(\\d*?)/.*uid@=(\\d*).*nn@=(.*?)/txt@=(.*?)/(.*)/";
+
+    private Logger logger = Logger.getLogger(DouyuProtocolMessage.class);
 
     public DouyuProtocolMessage() {
         byteArrayOutputStream = new ByteArrayOutputStream();
@@ -44,6 +54,11 @@ public class DouyuProtocolMessage {
         return byteArrayOutputStream.toByteArray();
     }
 
+    private Matcher getMatcher(String content, String regex) {
+        Pattern pattern = Pattern.compile(regex, Pattern.DOTALL);
+        return pattern.matcher(content);
+    }
+
     /**
      * Be careful about the length of content, because Chinese's char is not 1 length,
      * so you should encode it first.
@@ -58,30 +73,47 @@ public class DouyuProtocolMessage {
 
     public void receivedMessageContent(byte[] receiveMsg) {
         // Copy from stackoverflow
-        String message = bytesToHex(receiveMsg);
-        System.out.println(message);
+//        String message = bytesToHex(receiveMsg);
+//
+//        // Get first "/"
+//        int slashIndex = message.indexOf("2F") / 2;
+//        String messageType = new String();
+//        for (int i = 18; i < slashIndex; i++) {
+//            messageType += (char) receiveMsg[i];
+//        }
+//
+//        // Determine type of message
+//        if (messageType.equals("chatmsg")) {
+//            // "/nn@="
+//            int nicknameIndex = message.indexOf("2F6E6E403D") / 2;
+//            // "/txt@="
+//            int textIndex = message.indexOf("2F747874403D") / 2;
+//            // "/cid@="
+//            int textEndIndex = message.indexOf("2F636964403D") / 2;
+//
+//            String nickname = changeToChinese(receiveMsg, nicknameIndex, textIndex, 5);
+//            String decodedNickname = decodeMessage(nickname);
+//            String text = changeToChinese(receiveMsg, textIndex, textEndIndex, 6);
+//            String decodedText = decodeMessage(text);
+//            logger.info(decodedNickname + ": " + decodedText);
+//        }
 
-        // Get first "/"
-        int slashIndex = message.indexOf("2F") / 2;
-        String messageType = new String();
-        for (int i = 18; i < slashIndex; i++) {
-            messageType += (char) receiveMsg[i];
-        }
+        List<String> responses = splitResponse(receiveMsg);
 
-        // Determine type of message
-        if (messageType.equals("chatmsg")) {
-            // "/nn@="
-            int nicknameIndex = message.indexOf("2F6E6E403D") / 2;
-            // "/txt@="
-            int textIndex = message.indexOf("2F747874403D") / 2;
-            // "/cid@="
-            int textEndIndex = message.indexOf("2F636964403D") / 2;
+        for (String response : responses) {
+            if (!response.contains("chatmsg")) {
+                continue;
+            }
 
-            String nickname = changeToChinese(receiveMsg, nicknameIndex, textIndex, 5);
-            String decodedNickname = decodeMessage(nickname);
-            String text = changeToChinese(receiveMsg, textIndex, textEndIndex, 6);
-            String decodedText = decodeMessage(text);
-            System.out.println(decodedNickname + ": " + decodedText);
+            if (response == null) {
+                continue;
+            }
+
+            Matcher matcher = getMatcher(response, REGEX_CHAT_DANMAKU);
+
+            if (matcher.find()) {
+                logger.info(matcher.group(3) + " : " + matcher.group(4));
+            }
         }
     }
 
@@ -137,11 +169,43 @@ public class DouyuProtocolMessage {
         try {
             decodedMessage = URLDecoder.decode(message, "utf-8");
         } catch (UnsupportedEncodingException e) {
-            //            logger.info("Decode error! message: {}", message);
-            //            logger.info(e.getMessage());
+            logger.info("Decode error! message: " + message);
+            logger.info(e.getMessage());
         }
         decodedMessage = decode(decodedMessage);
         return decodedMessage;
+    }
+
+    /**
+     * 分离同时返回的多组数据
+     * 不优雅的方法：
+     *      1.先将字节数组转化为对应的十六进制字符串
+     *      2.然后用斗鱼定义的请求码"b2020000"来分割字符串
+     *      3.判断"00"为消息尾部
+     *      4.遍历分离出多组Response
+     */
+    public static List<String> splitResponse(byte[] buffer) {
+        if (buffer == null || buffer.length <= 0) {
+            return null;
+        }
+
+        List<String> resList = new ArrayList<>();
+        String byteArray = HexUtil.bytes2HexString(buffer).toLowerCase();
+
+        String[] responseStrings = byteArray.split("b2020000");
+        int end;
+        for (int i = 1; i < responseStrings.length; i++) {
+            if (!responseStrings[i].contains("00")) {
+                continue;
+            }
+            end = responseStrings[i].indexOf("00");
+            byte[] bytes = HexUtil.hexString2Bytes(responseStrings[i].substring(0, end));
+            if (bytes != null) {
+                resList.add(new String(bytes));
+            }
+        }
+
+        return resList;
     }
 
     public static String encode(String str) {

@@ -12,6 +12,7 @@ import com.jimmy.barrage.handler.Barrage;
 public class BarrageMain {
     public static void main(String[] args) {
         Barrage barrage = new Barrage("openbarrage.douyutv.com", 8601,"119.90.49.89", 8092);
-        barrage.getBarrage();
+        barrage.sendMessage("test222");
+        barrage.close();
     }
 }

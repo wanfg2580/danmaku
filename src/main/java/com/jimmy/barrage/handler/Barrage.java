@@ -5,7 +5,6 @@ import com.jimmy.barrage.util.MD5Util;
 import com.jimmy.barrage.util.Socket;
 
 import java.util.UUID;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -26,7 +25,7 @@ public class Barrage {
     private  ScheduledExecutorService scheduExec;
 
     private String username = "";
-    private String roomId = "74751";
+    private String roomId = "";
     private String ltkid = "";
     private String stk = "";
 
@@ -42,6 +41,7 @@ public class Barrage {
     }
 
     public void sendMessage(String message) {
+        login();
         socketAuth.sendData(Request.buildMessage(message));
     }
 
@@ -56,6 +56,7 @@ public class Barrage {
     }
 
     public void getBarrage() {
+//        socket.sendData("type@=loginreq/roomid@=" + roomId + "/");
         login();
         receiveMessage();
         socketAuth.sendData(Request.joinGroup(roomId));
@@ -69,7 +70,7 @@ public class Barrage {
         scheduExec.scheduleAtFixedRate(timingSign, 0, 40000, TimeUnit.MILLISECONDS);
     }
 
-    public void login() {
+    private void login() {
         String timestamp = String.valueOf(System.currentTimeMillis() / 1000);
         String uuid = UUID.randomUUID().toString().replace("-", "").toUpperCase();
         String vk = MD5Util.encrypt(timestamp + "7oE9nPEG9xXV69phU31FYCLUagKeYtsF" + uuid);
